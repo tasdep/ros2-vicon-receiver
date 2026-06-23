@@ -149,11 +149,21 @@ bool Communicator::disconnect()
 void Communicator::get_frame()
 {
     // Request a new frame
-    vicon_client.GetFrame();
+    auto frame_result = vicon_client.GetFrame();
     Output_GetFrameNumber frame_number = vicon_client.GetFrameNumber();
 
     // Get the number of subjects in the frame
     unsigned int subject_count = vicon_client.GetSubjectCount().SubjectCount;
+    if (frame_result.Result != Result::Success)
+    {
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(),
+            *this->get_clock(),
+            2000,
+            "Vicon GetFrame did not return success; frame_number=%u subject_count=%u",
+            frame_number.FrameNumber,
+            subject_count);
+    }
 
     map<string, Publisher>::iterator pub_it;
 
@@ -177,6 +187,17 @@ void Communicator::get_frame()
                 vicon_client.GetSegmentGlobalTranslation(subject_name, segment_name);
             Output_GetSegmentGlobalRotationQuaternion quat =
                 vicon_client.GetSegmentGlobalRotationQuaternion(subject_name, segment_name);
+            if (trans.Occluded || quat.Occluded)
+            {
+                RCLCPP_WARN_THROTTLE(
+                    this->get_logger(),
+                    *this->get_clock(),
+                    2000,
+                    "Skipping occluded Vicon segment %s/%s",
+                    subject_name.c_str(),
+                    segment_name.c_str());
+                continue;
+            }
 
             // Build a TF message for this segment
             geometry_msgs::msg::TransformStamped tf_msg;
@@ -238,18 +259,18 @@ void Communicator::get_frame()
                 }
                 else
                 {
-                    // Create a publisher if it doesn't exist, de-duplicating concurrent attempts
+                    // Create a publisher if it doesn't exist. This is intentionally
+                    // synchronous; a tight ClientPull loop can starve a helper
+                    // thread trying to acquire the same mutex.
                     std::string key = subject_name + "/" + segment_name;
                     if (pending_publishers.find(key) == pending_publishers.end())
                     {
                         pending_publishers.insert(key);
-                        lock.unlock();
-                        create_publisher(subject_name, segment_name);
-                    }
-                    else
-                    {
-                        // Another thread is already creating this publisher
-                        lock.unlock();
+                        std::string topic_name = ns_name + "/" + subject_name + "/" + segment_name;
+                        std::string msg = "Creating publisher for segment " + segment_name + " from subject " + subject_name;
+                        cout << msg << endl;
+                        pub_map.insert(std::map<std::string, Publisher>::value_type(key, Publisher(topic_name, this)));
+                        pending_publishers.erase(key);
                     }
                 }
             }
@@ -296,9 +317,13 @@ int main(int argc, char** argv)
     // Connect to the Vicon server
     node->connect();
 
+    rclcpp::Rate loop_rate(240.0);
+
     // Continuously retrieve frames while ROS 2 is running
     while (rclcpp::ok()){
         node->get_frame();
+        rclcpp::spin_some(node);
+        loop_rate.sleep();
     }
 
     // Disconnect from the Vicon server and shut down ROS 2
