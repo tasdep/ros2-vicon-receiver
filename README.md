@@ -85,6 +85,8 @@ This is NOT an official ROS 2 package, but it has been successfully tested with 
 - Package name: **`vicon_receiver`**
 - Primary executable: **`vicon_client`** (C++)
 - Launch file: **`client.launch.py`**
+- This fork also carries the companion **`vicon_velocity_estimator`** Python
+  package for deriving `TwistStamped` velocity from Vicon `PoseStamped` topics.
 
 ---
 
