@@ -166,7 +166,7 @@ Follow these host steps if you prefer a native (non‑container) setup. Assumes 
 3. Clone the package into `src/`:
 
     ```bash
-    git clone https://github.com/OPT4SMART/ros2-vicon-receiver.git
+    git clone git@github.com:tasdep/ros2-vicon-receiver.git
     cd ..   # back to workspace root
     ```
 
