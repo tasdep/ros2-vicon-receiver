@@ -4,6 +4,7 @@ import math
 
 import rclpy
 from geometry_msgs.msg import PoseStamped, TwistStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 
@@ -309,9 +310,14 @@ class PoseVelocityEstimator(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = PoseVelocityEstimator()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
